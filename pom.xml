@@ -16,6 +16,23 @@
   
   
   <dependencies>
+  	<!--  internal dependency -->
+  	<dependency>
+		<groupId>de.rwth.i9.palm</groupId>
+		<artifactId>palm-model</artifactId>
+		<version>${project.version}</version>
+	</dependency>
+  	<dependency>
+		<groupId>de.rwth.i9.palm</groupId>
+		<artifactId>palm-persistence-relational</artifactId>
+		<version>${project.version}</version>
+		<exclusions>
+			<exclusion>
+				<groupId>de.rwth.i9.palm</groupId>
+				<artifactId>palm-model</artifactId>
+			</exclusion>
+		</exclusions>
+	</dependency>
   	<!--
 	    Core utilities used by other modules.
 	    Define this if you use Spring Utility APIs (org.springframework.core.*/org.springframework.util.*)
@@ -213,11 +230,11 @@
          <version>${org.reflections.version}</version>
      </dependency>
 	  
-	<!-- tomcat servlet api -->
+	<!-- servlet api -->
 	<dependency>
-		<groupId>org.apache.tomcat</groupId>
-		<artifactId>servlet-api</artifactId>
-		<version>${tomcat.servlet.api.version}</version>
+		<groupId>javax.servlet</groupId>
+		<artifactId>javax.servlet-api</artifactId>
+		<version>3.1.0</version>
 		<scope>provided</scope>
 	</dependency>
 	

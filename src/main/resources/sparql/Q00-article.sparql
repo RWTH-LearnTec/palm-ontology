@@ -1,0 +1,7 @@
+SELECT DISTINCT ?article
+WHERE {
+  { <http://ns.nature.com/terms/Article> ?property ?hasValue }
+  UNION
+  { ?article ?property <http://ns.nature.com/terms/Article> }
+}
+ORDER BY (!BOUND(?hasValue)) ?property ?hasValue ?article
