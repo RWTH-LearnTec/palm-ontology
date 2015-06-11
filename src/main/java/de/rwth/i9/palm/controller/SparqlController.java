@@ -30,8 +30,16 @@ import de.rwth.i9.palm.helper.FileHelper;
 import de.rwth.i9.palm.helper.ResultSetConverter;
 import de.rwth.i9.palm.model.Author;
 import de.rwth.i9.palm.model.AuthorAlias;
+import de.rwth.i9.palm.model.Conference;
+import de.rwth.i9.palm.model.Dataset;
 import de.rwth.i9.palm.model.Institution;
 import de.rwth.i9.palm.model.Location;
+import de.rwth.i9.palm.model.Publication;
+import de.rwth.i9.palm.model.PublicationSource;
+import de.rwth.i9.palm.model.Reference;
+import de.rwth.i9.palm.model.Source;
+import de.rwth.i9.palm.model.Subject;
+import de.rwth.i9.palm.model.User;
 import de.rwth.i9.palm.persistence.PersistenceStrategy;
 
 @Controller
@@ -76,21 +84,12 @@ public class SparqlController extends TripleStore
 
 			// insertAndCheckAuthor( q, rs );
 
-			// try to loop
-			// while ( rs.hasNext() && q.startsWith(
-			// "SELECT DISTINCT ?property ?hasValue ?isValueOf" ) )
-			// {
-			// QuerySolution qs = rs.next();
-			// Resource property = qs.getResource( "property" );
-			// Literal hasValue = qs.getLiteral( "hasValue" );
-			// //Resource isValueOf = qs.getResource( "isValueOf"
-			// ).asResource();
-			//
-			// //System.out.println( property.toString() + " -> " +
-			// hasValue.toString() + " -> " + isValueOf.toString() );
-			// System.out.println( property.toString() + " -> " +
-			// hasValue.toString());
-			// }
+			// insertReference( q, rs );
+
+			// insertSubject( q, rs );
+
+			// insertPublication( q, rs );
+
 			System.out.println( "------------" + rs );
 			result = ResultSetConverter.convertResultSetToJSON( rs );
 			qe.close();
@@ -106,6 +105,233 @@ public class SparqlController extends TripleStore
 		}
 
 		return ( result.replaceAll( "[^\\x00-\\x7F]", " " ) );
+	}
+
+	// Query :
+	// SELECT DISTINCT ?value
+	// WHERE { ?resource <http://purl.org/dc/elements/1.1/subject> ?value }
+	// ORDER BY ?value
+	private void insertSubject( String q, ResultSet rs )
+	{
+		if ( q.contains( "http://purl.org/dc/elements/1.1/subject" ) )
+		{
+			while ( rs.hasNext() )
+			{
+				String valueResource = null;
+				QuerySolution qs = rs.next();
+				try
+				{
+					valueResource = qs.getLiteral( "value" ).toString();
+					valueResource = valueResource.replaceAll( "[^\\x00-\\x7F]", " " ).trim();
+					Subject subject = persistenceStrategy.getSubjectDAO().getSubjectByLabel( valueResource );
+
+					if ( subject == null )
+					{
+						subject = new Subject();
+						subject.setLabel( valueResource );
+						persistenceStrategy.getSubjectDAO().persist( subject );
+					}
+				}
+				catch ( Exception e )
+				{
+					String resource = qs.getResource( "value" ).toString();
+					String[] resourceSplit = resource.split( "resource/" );
+					valueResource = resourceSplit[1].toLowerCase().replace( "_", " " );
+					Subject subject = persistenceStrategy.getSubjectDAO().getSubjectByLabel( valueResource );
+					if ( subject != null )
+					{
+						subject.setResourceUri( resource );
+						persistenceStrategy.getSubjectDAO().persist( subject );
+					}
+				}
+			}
+		}
+	}
+
+	private void insertPublication( String q, ResultSet rs )
+	{
+		if ( q.contains( "http://data.linkededucation.org/resource/lak" ) )
+		{
+
+			String confNotation = null;
+
+			String[] split1 = q.split( "/paper" );
+			String[] split2 = split1[0].split( "<" );
+
+			if ( split2[1].contains( "conference" ) )
+			{
+				String[] uriSplit = split2[1].split( "conference/" );
+				confNotation = uriSplit[1];
+			}
+			else if ( split2[1].contains( "journal" ) )
+			{
+				String[] uriSplit = split2[1].split( "journal/" );
+				confNotation = uriSplit[1];
+			}
+			else
+			{
+				String[] uriSplit = split2[1].split( "specialissue/" );
+				confNotation = uriSplit[1];
+			}
+
+			if ( confNotation.startsWith( "jedm" ) && confNotation.length() > 8 )
+				confNotation = confNotation.substring( 0, 8 );
+
+			if ( confNotation.startsWith( "jla" ) && confNotation.length() > 7 )
+				confNotation = confNotation.substring( 0, 7 );
+
+			if ( confNotation.startsWith( "jets" ) )
+				confNotation = "jets20" + confNotation.substring( 4, 6 );
+
+			Map<String, Conference> notationConferenceMaps = persistenceStrategy.getConferenceDAO().getNotationConferenceMaps();
+			Conference conference = notationConferenceMaps.get( confNotation );
+
+			System.out.println( "conf : " + conference.getConferenceGroup().getName() + " - year : " + conference.getYear() );
+
+
+			Dataset dataset = persistenceStrategy.getDatasetDAO().getById( "1" );
+			Source source = persistenceStrategy.getSourceDAO().getById( "1" );
+			User user = persistenceStrategy.getUserDAO().getById( "1" );
+
+			PublicationSource publicationSource = new PublicationSource();
+			publicationSource.setVenue( conference.getConferenceGroup().getName() );
+			publicationSource.setYear( conference.getYear() );
+			publicationSource.setSource( source );
+			publicationSource.setUser( user );
+
+			Publication publication = new Publication();
+			publication.setConference( conference );
+			publication.setDataset( dataset );
+
+			while ( rs.hasNext() )
+			{
+				QuerySolution qs = rs.next();
+				String propertyResource = qs.getResource( "property" ).toString();
+
+				if ( propertyResource.equals( "http://data.linkededucation.org/ns/linked-education.rdf#body" ) )
+				{
+					String contentText = qs.getLiteral( "hasValue" ).toString();
+					contentText = contentText.replaceAll( "[^\\x00-\\x7F]", " " );
+
+					publicationSource.setContentText( contentText );
+					publication.setContentText( contentText );
+					publication.setContentTextTokenized( contentText );
+				}
+				else if ( propertyResource.equals( "http://ns.nature.com/terms/hasCitation" ) )
+				{
+					String referenceUri = qs.getResource( "hasValue" ).toString();
+					Reference reference = persistenceStrategy.getReferenceDAO().getByUri( referenceUri );
+
+					if ( reference != null )
+					{
+						publication.addReference( reference );
+						String pubSourceCurrentCitation = "";
+						if ( publicationSource.getCitation() != null && !publicationSource.getCitation().equals( "" ) )
+							pubSourceCurrentCitation = publicationSource.getCitation() + "_#_\n";
+						publicationSource.setCitation( pubSourceCurrentCitation + reference.getTitle().replaceAll( "[^\\x00-\\x7F]", " " ) );
+					}
+				}
+				else if ( propertyResource.equals( "http://purl.org/dc/elements/1.1/creator" ) )
+				{
+					String authorUri = qs.getResource( "hasValue" ).toString().replaceAll( "[^\\x00-\\x7F]", "" );
+					String[] authorUriSplit = authorUri.split( "person/" );
+
+					if ( authorUriSplit.length < 2 )
+						continue;
+
+					Author author = persistenceStrategy.getAuthorDAO().getByUri( authorUriSplit[1] );
+
+					if ( author == null )
+						continue;
+
+					publication.addCoAuthor( author );
+
+					String publicationSourceAuthor = "";
+					if ( publicationSource.getAuthorString() != null && !publicationSource.getAuthorString().equals( "" ) )
+						publicationSourceAuthor = publicationSource.getAuthorString() + "_#_\n";
+
+					publicationSource.setAuthorString( publicationSourceAuthor + author.getName() );
+				}
+				else if ( propertyResource.equals( "http://purl.org/dc/elements/1.1/subject" ) )
+				{
+					try
+					{
+						String subjectString = qs.getLiteral( "hasValue" ).toString();
+						if ( subjectString == null || subjectString.isEmpty() )
+							continue;
+
+						Subject subject = persistenceStrategy.getSubjectDAO().getSubjectByLabel( subjectString );
+
+						if ( subject == null )
+							continue;
+
+						publication.addSubject( subject );
+						String publicationSourceSubject = "";
+						if ( publicationSource.getKeyword() != null && !publicationSource.getKeyword().equals( "" ) )
+							publicationSourceSubject = publicationSource.getKeyword() + ", ";
+
+						publicationSource.setKeyword( publicationSourceSubject + subject.getLabel() );
+					}
+					catch ( Exception e )
+					{
+						// nothing
+					}
+				}
+				else if ( propertyResource.equals( "http://purl.org/dc/elements/1.1/title" ) )
+				{
+					String title = qs.getLiteral( "hasValue" ).toString().replaceAll( "[^\\x00-\\x7F]", "" );
+					publication.setTitle( title );
+					publicationSource.setTitle( title );
+				}
+				else if ( propertyResource.equals( "http://purl.org/ontology/bibo/abstract" ) )
+				{
+					String abstractText = qs.getLiteral( "hasValue" ).toString().replaceAll( "[^\\x00-\\x7F]", "" );
+					publication.setAbstractText( abstractText );
+					publication.setAbstractTokenized( abstractText );
+					publicationSource.setAbstractText( abstractText );
+				}
+			}
+
+			publication.addPublicationSource( publicationSource );
+			persistenceStrategy.getPublicationDAO().persist( publication );
+			
+			publicationSource.setPublication( publication );
+			persistenceStrategy.getPublicationSourceDAO().persist( publicationSource );
+		}
+	}
+
+	private void insertReference( String q, ResultSet rs )
+	{
+		if ( q.contains( "http://data.linkededucation.org/resource" ) )
+		{
+
+			String[] split1 = q.split( ">" );
+			String[] split2 = split1[0].split( "<" );
+			String uri = split2[1];
+			String title = null;
+			String sameAsUri = null;
+
+			while ( rs.hasNext() )
+			{
+				QuerySolution qs = rs.next();
+				String propertyResource = qs.getResource( "property" ).toString();
+
+				// get the institution
+				if ( propertyResource.equals( "http://data.linkededucation.org/ns/linked-education.rdf#text" ) )
+					title = qs.getLiteral( "hasValue" ).toString();
+				else if ( propertyResource.equals( "http://www.w3.org/2002/07/owl#sameAs" ) )
+					sameAsUri = qs.getResource( "isValueOf" ).toString();
+			}
+
+			Reference reference = new Reference();
+			reference.setURI( uri );
+			reference.setTitle( title );
+			if ( sameAsUri != null )
+				reference.setSameAsUri( sameAsUri );
+
+			persistenceStrategy.getReferenceDAO().persist( reference );
+		}
+
 	}
 
 	private void insertAndCheckAuthor( String q, ResultSet rs )
