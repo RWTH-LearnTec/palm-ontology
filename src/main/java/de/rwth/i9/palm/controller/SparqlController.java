@@ -403,7 +403,7 @@ public class SparqlController extends TripleStore
 							// check for author name alias, based on first
 							// letter of first name
 							// and institution
-							if ( firstName.length() > 0 && author.getFirstName().toLowerCase().startsWith( firstName.toLowerCase().substring( 0, 1 ) ) && author.getInstitution().get( 0 ).equals( institution ) )
+						if ( firstName.length() > 0 && author.getFirstName().toLowerCase().startsWith( firstName.toLowerCase().substring( 0, 1 ) ) && author.getInstitutions().get( 0 ).equals( institution ) )
 							{
 								isAuthorAlias = true;
 							}
