@@ -29,7 +29,6 @@ import com.hp.hpl.jena.query.ResultSet;
 import de.rwth.i9.palm.helper.FileHelper;
 import de.rwth.i9.palm.helper.ResultSetConverter;
 import de.rwth.i9.palm.model.Author;
-import de.rwth.i9.palm.model.AuthorAlias;
 import de.rwth.i9.palm.model.Conference;
 import de.rwth.i9.palm.model.Dataset;
 import de.rwth.i9.palm.model.Institution;
@@ -196,7 +195,6 @@ public class SparqlController extends TripleStore
 			PublicationSource publicationSource = new PublicationSource();
 			publicationSource.setVenue( conference.getConferenceGroup().getName() );
 			publicationSource.setYear( conference.getYear() );
-			publicationSource.setSource( source );
 			publicationSource.setUser( user );
 
 			Publication publication = new Publication();
@@ -411,11 +409,7 @@ public class SparqlController extends TripleStore
 							{
 								if ( author.getFirstName().length() < firstName.length() )
 								{
-									AuthorAlias authorAlias = new AuthorAlias();
-									authorAlias.setURI( author.getURI() );
-									authorAlias.setName( author.getName() );
-
-									author.addAlias( authorAlias );
+								author.setAlias( author.getName() );
 									author.setName( fullname );
 									author.setURI( fullname.toLowerCase().replace( ".", "" ).replace( " ", "-" ) );
 									author.setFirstName( firstName );
@@ -423,10 +417,7 @@ public class SparqlController extends TripleStore
 								}
 								else
 								{
-									AuthorAlias authorAlias = new AuthorAlias();
-									authorAlias.setURI( fullname.toLowerCase().replace( ".", "" ).replace( " ", "-" ) );
-									authorAlias.setName( fullname );
-									author.addAlias( authorAlias );
+								author.setAlias( fullname );
 									persistenceStrategy.getAuthorDAO().persist( author );
 								}
 							}
